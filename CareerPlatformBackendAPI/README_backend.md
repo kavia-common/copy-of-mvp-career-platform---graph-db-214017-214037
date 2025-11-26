@@ -7,7 +7,10 @@ This backend integrates an optional Neo4j graph to power role adjacency queries.
 Copy `.env.example` to `.env` and adjust values:
 
 ```
+# Either flag enables graph integration (USE_GRAPH is an alias)
 FEATURE_GRAPH_ENABLED=false
+# or
+USE_GRAPH=false
 
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USERNAME=neo4j
@@ -16,23 +19,51 @@ NEO4J_PASSWORD=please-change-me
 CORS_ALLOW_ORIGINS=*
 ```
 
-- When `FEATURE_GRAPH_ENABLED=false`, the API starts with no graph dependency.
-- When `FEATURE_GRAPH_ENABLED=true`, the service tries to connect to Neo4j using `NEO4J_*` variables.
+- When `FEATURE_GRAPH_ENABLED=false` (or `USE_GRAPH=false`), the API starts with no graph dependency and will use in-memory fallbacks for certain endpoints.
+- When `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`), the service tries to connect to Neo4j using `NEO4J_*` variables.
 
 ## Endpoints
 
 - `GET /` – Health check with graph status (disabled/healthy/unhealthy).
 - `GET /role-adjacency` – Returns alternative role suggestions.
-  - Uses Neo4j when `FEATURE_GRAPH_ENABLED=true`.
+  - Uses Neo4j when `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`).
   - Returns an empty list fallback when disabled.
 
-Query parameters:
-- `userId` (optional)
-- `currentRoleId` (optional)
-- `targetRoleId` (optional)
-- `limit` (default 20)
+### NEW: Roles Management
 
-Response shape remains unchanged (array of Role objects).
+- `POST /roles` – Create or upsert a Role (201).
+  - When graph is enabled/healthy, persists to Neo4j.
+  - Otherwise, uses an in-memory fallback DAO and logs a warning.
+- `GET /roles` – List roles (200).
+  - From Neo4j when enabled; from in-memory fallback otherwise.
+  - Optional query param: `limit` (default 500, max 5000).
+- `GET /roles/{id}` – Get a single role by id (200 or 404).
+
+Role model:
+```
+{
+  "id": "string",
+  "name": "string | null",
+  "description": "string | null",
+  "metadata": { "key": "value", ... } | null,
+  "source": "string | null",
+  "version": "string | null"
+}
+```
+
+Example curl:
+```
+# Create/Upsert a role
+curl -s -X POST http://localhost:3001/roles \
+  -H "Content-Type: application/json" \
+  -d '{"id":"CA","name":"Chief Architect","description":"Architecture leader"}'
+
+# List roles
+curl -s "http://localhost:3001/roles?limit=100"
+
+# Get role by id
+curl -s http://localhost:3001/roles/CA
+```
 
 ## ETL Utilities
 
@@ -109,4 +140,4 @@ Column names are matched case-insensitively; minor variations like underscores/d
 ## Troubleshooting
 
 - If the service starts with `"graph": "unhealthy"`, verify that Neo4j is running and credentials are correct.
-- If ETL fails with connection errors, ensure `FEATURE_GRAPH_ENABLED=true` and `NEO4J_*` variables are set in your environment when running the CLI.
+- If ETL fails with connection errors, ensure `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`) and `NEO4J_*` variables are set in your environment when running the CLI.

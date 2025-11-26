@@ -57,7 +57,8 @@ def get_settings() -> Settings:
     load_dotenv(override=False)
 
     # Read environment variables
-    feature_graph_enabled = _to_bool(os.getenv("FEATURE_GRAPH_ENABLED"), default=False)
+    # Support both FEATURE_GRAPH_ENABLED and USE_GRAPH as aliases for toggling graph usage
+    feature_graph_enabled = _to_bool(os.getenv("FEATURE_GRAPH_ENABLED") or os.getenv("USE_GRAPH"), default=False)
     neo4j_uri = os.getenv("NEO4J_URI")
     neo4j_username = os.getenv("NEO4J_USERNAME")
     neo4j_password = os.getenv("NEO4J_PASSWORD")

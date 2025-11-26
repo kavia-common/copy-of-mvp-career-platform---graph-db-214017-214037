@@ -51,6 +51,48 @@ class GraphDAL:
             )
 
     # PUBLIC_INTERFACE
+    def get_roles(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        """
+        Retrieve a list of roles.
+
+        Returns a list of dictionaries with fields: id, name, description, metadata, source, version.
+        """
+        cypher = """
+        MATCH (r:Role)
+        RETURN r.id AS id,
+               r.name AS name,
+               r.description AS description,
+               r.metadata AS metadata,
+               r.source AS source,
+               r.version AS version
+        ORDER BY r.id
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            records = session.run(cypher, limit=limit)
+            return [dict(r) for r in records]
+
+    # PUBLIC_INTERFACE
+    def get_role_by_id(self, role_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a single role by id.
+
+        Returns a dict with fields: id, name, description, metadata, source, version, or None if not found.
+        """
+        cypher = """
+        MATCH (r:Role {id: $id})
+        RETURN r.id AS id,
+               r.name AS name,
+               r.description AS description,
+               r.metadata AS metadata,
+               r.source AS source,
+               r.version AS version
+        """
+        with self._driver.session() as session:
+            rec = session.run(cypher, id=role_id).single()
+            return dict(rec) if rec else None
+
+    # PUBLIC_INTERFACE
     def upsert_competency(
         self,
         competency_id: str,
