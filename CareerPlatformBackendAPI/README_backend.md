@@ -16,6 +16,10 @@ NEO4J_URI=bolt://neo4j:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=please-change-me
 
+# Optional tuning for health/connection checks
+NEO4J_HEALTH_QUERY=RETURN 1 AS ok
+NEO4J_CONNECT_TIMEOUT=3.0
+
 CORS_ALLOW_ORIGINS=*
 ```
 
@@ -25,9 +29,11 @@ CORS_ALLOW_ORIGINS=*
 ## Endpoints
 
 - `GET /` – Health check with graph status (disabled/healthy/misconfigured/unhealthy).
+  - Returns 200 for `disabled`, `misconfigured`, or `healthy`.
+  - Returns 503 for `unhealthy` and includes `graph_error`, `graph_hint`, and `graph_category` strings to aid diagnosis.
 - `GET /role-adjacency` – Returns alternative role suggestions.
   - Uses Neo4j when `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`).
-  - Returns an empty list fallback when disabled.
+  - Returns an empty list fallback when disabled/unavailable.
 
 ### NEW: Roles Management
 
@@ -145,12 +151,18 @@ Column names are matched case-insensitively; minor variations like underscores/d
   - `unhealthy`: Graph is configured but the API cannot connect (Neo4j down/unreachable) or authentication failed.
   - `healthy`: Graph is configured and responds to a basic query.
 
+- When graph is `unhealthy`, the health endpoint returns HTTP 503 with:
+  - `graph_error`: raw error message from the driver
+  - `graph_hint`: actionable hint (e.g., check credentials or host/port)
+  - `graph_category`: one of `auth`, `network`, `timeout`, `other`
+
 - Checklist when the graph is not healthy:
   1) Ensure the feature flag is set: `FEATURE_GRAPH_ENABLED=true` or `USE_GRAPH=true`.
   2) Provide all required env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`.
   3) Verify the database is reachable from the backend container (e.g., bolt port 7687).
   4) Validate credentials independently if possible (e.g., using neo4j Browser or cypher-shell).
-  5) Check backend logs; when misconfigured, logs include the missing variable names.
+  5) Consider tuning `NEO4J_CONNECT_TIMEOUT` (seconds) or adjusting `NEO4J_HEALTH_QUERY`.
+  6) Check backend logs; when misconfigured, logs include the missing variable names.
 
 - ETL:
   - If ETL fails with connection errors, ensure the same environment is set when running the CLI:

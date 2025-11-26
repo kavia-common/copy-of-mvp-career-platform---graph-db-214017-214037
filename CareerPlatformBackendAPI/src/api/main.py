@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.core.config import get_settings
@@ -143,16 +144,48 @@ def create_app() -> FastAPI:
         - "misconfigured" when the flag is on but NEO4J_* env vars are missing
         - "healthy" when the Neo4j driver is connected and responds to a trivial query
         - "unhealthy" when configured but connectivity/auth fails
+
+        Behavior:
+        - Returns HTTP 200 with {"message": "Healthy", "graph": "<status>"} for disabled/misconfigured/healthy.
+        - Returns HTTP 503 for "unhealthy" with additional string hints: graph_error, graph_hint, graph_category.
         """
-        client = getattr(app.state, "graph_client", None)
-        graph_status = "disabled"
-        if client:
-            try:
-                graph_status = client.status()
-            except Exception as e:
-                logger.debug("Graph status check failed: %s", e)
-                graph_status = "unhealthy" if getattr(client, "enabled", False) else "disabled"
-        return {"message": "Healthy", "graph": graph_status}
+        client: Optional[GraphClient] = getattr(app.state, "graph_client", None)
+        if not client:
+            # If the client is not yet attached, assume disabled (startup not completed yet)
+            return {"message": "Healthy", "graph": "disabled"}
+
+        try:
+            status_str, details = client.status_with_details()
+        except Exception as e:
+            logger.debug("Graph status check failed: %s", e)
+            # If anything unexpected happened, default to unhealthy if enabled, else disabled
+            enabled = getattr(client, "enabled", False)
+            if enabled:
+                payload = {
+                    "message": "Unhealthy",
+                    "graph": "unhealthy",
+                    "graph_error": str(e),
+                    "graph_hint": "Unexpected error while checking graph health.",
+                    "graph_category": "other",
+                }
+                return JSONResponse(content=payload, status_code=503)
+            return {"message": "Healthy", "graph": "disabled"}
+
+        if status_str == "unhealthy":
+            # Flatten details as strings to preserve a simple payload
+            payload = {
+                "message": "Unhealthy",
+                "graph": "unhealthy",
+                "graph_error": details.get("message", ""),
+                "graph_hint": details.get("hint", ""),
+                "graph_category": details.get("category", ""),
+            }
+            # Distinguish auth vs network timeouts in logs for faster diagnosis
+            logger.warning("Graph unhealthy: category=%s code=%s message=%s", details.get("category"), details.get("code"), details.get("message"))
+            return JSONResponse(content=payload, status_code=503)
+
+        # disabled | misconfigured | healthy -> 200
+        return {"message": "Healthy", "graph": status_str}
 
     # PUBLIC_INTERFACE
     @app.get(
