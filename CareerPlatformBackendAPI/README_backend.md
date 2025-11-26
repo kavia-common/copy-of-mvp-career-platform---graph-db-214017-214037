@@ -24,7 +24,7 @@ CORS_ALLOW_ORIGINS=*
 
 ## Endpoints
 
-- `GET /` – Health check with graph status (disabled/healthy/unhealthy).
+- `GET /` – Health check with graph status (disabled/healthy/misconfigured/unhealthy).
 - `GET /role-adjacency` – Returns alternative role suggestions.
   - Uses Neo4j when `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`).
   - Returns an empty list fallback when disabled.
@@ -135,9 +135,23 @@ Column names are matched case-insensitively; minor variations like underscores/d
 
 - The DAL ensures idempotent upserts for nodes and relationships.
 - ADJACENT_TO is created in both directions by default.
-- Health check returns `"graph": "disabled"|"healthy"|"unhealthy"` for quick diagnostics.
+- Health check returns `"graph": "disabled"|"healthy"|"misconfigured"|"unhealthy"` for quick diagnostics.
 
 ## Troubleshooting
 
-- If the service starts with `"graph": "unhealthy"`, verify that Neo4j is running and credentials are correct.
-- If ETL fails with connection errors, ensure `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`) and `NEO4J_*` variables are set in your environment when running the CLI.
+- Graph status meanings:
+  - `disabled`: Graph feature flag is OFF (`FEATURE_GRAPH_ENABLED=false` or `USE_GRAPH=false`).
+  - `misconfigured`: Graph feature flag is ON but one or more `NEO4J_*` variables are missing. The service runs but will not use Neo4j until fixed.
+  - `unhealthy`: Graph is configured but the API cannot connect (Neo4j down/unreachable) or authentication failed.
+  - `healthy`: Graph is configured and responds to a basic query.
+
+- Checklist when the graph is not healthy:
+  1) Ensure the feature flag is set: `FEATURE_GRAPH_ENABLED=true` or `USE_GRAPH=true`.
+  2) Provide all required env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`.
+  3) Verify the database is reachable from the backend container (e.g., bolt port 7687).
+  4) Validate credentials independently if possible (e.g., using neo4j Browser or cypher-shell).
+  5) Check backend logs; when misconfigured, logs include the missing variable names.
+
+- ETL:
+  - If ETL fails with connection errors, ensure the same environment is set when running the CLI:
+    `FEATURE_GRAPH_ENABLED=true` (or `USE_GRAPH=true`) and `NEO4J_*` variables are present.

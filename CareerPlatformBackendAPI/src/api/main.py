@@ -137,12 +137,21 @@ def create_app() -> FastAPI:
     def health_check() -> Dict[str, str]:
         """
         Health check endpoint.
-        Returns a simple JSON payload indicating service health.
+
+        Returns a simple JSON payload indicating service health. Graph status will be one of:
+        - "disabled" when FEATURE_GRAPH_ENABLED/USE_GRAPH is false
+        - "misconfigured" when the flag is on but NEO4J_* env vars are missing
+        - "healthy" when the Neo4j driver is connected and responds to a trivial query
+        - "unhealthy" when configured but connectivity/auth fails
         """
         client = getattr(app.state, "graph_client", None)
         graph_status = "disabled"
-        if client and client.enabled:
-            graph_status = "healthy" if client.is_healthy() else "unhealthy"
+        if client:
+            try:
+                graph_status = client.status()
+            except Exception as e:
+                logger.debug("Graph status check failed: %s", e)
+                graph_status = "unhealthy" if getattr(client, "enabled", False) else "disabled"
         return {"message": "Healthy", "graph": graph_status}
 
     # PUBLIC_INTERFACE
