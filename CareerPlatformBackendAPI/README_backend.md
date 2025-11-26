@@ -60,6 +60,37 @@ python -m src.etl.ingest_graph seed seed/
 python -m src.etl.ingest_graph all data/
 ```
 
+### Excel support and optional JSON converter
+
+- The ETL already accepts both CSV and Excel files directly (read via pandas/openpyxl).
+- For MCP and traceability workflows, you can optionally convert Excel sources into JSON seed files first:
+  - Converter CLI: `python -m src.etl.xlsx_to_json ...`
+  - Output directory (default): `data/processed/` (roles.json, competencies.json, requires.json, adjacency.json)
+
+Examples using provided spreadsheets:
+
+```
+# 1) Roles from abbreviations (Competency_mapping.xlsx / 'Role abbreviations' sheet)
+python -m src.etl.xlsx_to_json roles-from-abbrev attachments/20251126_165919_Competency_mapping.xlsx --output-dir data/processed
+
+# 2) Competencies from definitions (Competency_mapping.xlsx / 'Competency Definitions' sheet)
+python -m src.etl.xlsx_to_json competencies-from-definitions attachments/20251126_165919_Competency_mapping.xlsx --output-dir data/processed
+
+# 3) Role->Competency requirements from matrix (Competency_mapping.xlsx / 'Competencies and roles')
+python -m src.etl.xlsx_to_json requires-from-matrix attachments/20251126_165919_Competency_mapping.xlsx --output-dir data/processed
+
+# 4) Role adjacency from square matrix (CA_Role_Adjacency.xlsx)
+#    Optionally map long role names to abbreviations using the same Competency_mapping workbook.
+python -m src.etl.xlsx_to_json adjacency-from-matrix attachments/20251126_165917_CA_Role_Adjacency.xlsx --mapping-xlsx attachments/20251126_165919_Competency_mapping.xlsx --output-dir data/processed
+
+# 5) Ingest JSON seeds into Neo4j
+python -m src.etl.ingest_graph seed data/processed
+```
+
+Notes:
+- Column names are matched case-insensitively and tolerate minor variations/underscores/dashes.
+- The adjacency matrix converter deduplicates bidirectional pairs and ignores self-edges.
+
 ### Expected columns
 
 - Roles: `id`, `name`, (`description` optional), (`source` optional), (`version` optional)
